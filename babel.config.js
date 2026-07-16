@@ -1,7 +1,17 @@
 module.exports = {
   presets: ['module:@react-native/babel-preset'],
   plugins: [
-    // ... 其他插件
-    'react-native-reanimated/plugin', // 務必確保這一行在最後面！
+    [
+      'module:react-native-dotenv',
+      {
+        moduleName: '@env',
+        path: '.env',
+        blacklist: null,
+        whitelist: null,
+        safe: false,
+        allowUndefined: true,
+      },
+    ],
+    'react-native-reanimated/plugin', // 如果你有使用 react-native-reanimated 記得保留在最後一項
   ],
 };
