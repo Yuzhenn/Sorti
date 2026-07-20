@@ -41,6 +41,13 @@ node_modules/
 npm-debug.log
 yarn-error.log
 
+# Frontend local environment
+/.env
+!/.env.example
+
+# Local environment files
+src/backend/.env
+
 # fastlane
 #
 # It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the

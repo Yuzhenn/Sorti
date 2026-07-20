@@ -199,7 +199,7 @@ const HomeScreen = ({ navigation }: any) => {
       {/* 右下角浮動 AI 小助手 */}
       <TouchableOpacity 
         style={[styles.fab, { backgroundColor: theme.primary }]}
-        onPress={() => navigation.navigate('Chat')}
+        onPress={() => navigation.navigate('AIChat')}
       >
         <MaterialIcon name="robot-happy-outline" size={36} color={fabIconColor} />
       </TouchableOpacity>

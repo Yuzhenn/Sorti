@@ -1,167 +1,274 @@
-import React, { useState, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  StyleSheet,
+  ActivityIndicator,
   View,
   Text,
   TextInput,
   TouchableOpacity,
+  FlatList,
+  StyleSheet,
   SafeAreaView,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ListRenderItemInfo,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useTheme } from '../context/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 
-// 定義單條訊息的型別
+import { useTheme } from '../context/ThemeContext';
+import { sendMessageToAI } from '../services/aiApi';
+import type { ChatItem } from '../types/ai';
+
+type MessageSender = 'user' | 'ai' | 'loading';
+
 interface Message {
   id: string;
+  sender: MessageSender;
   text: string;
-  sender: 'user' | 'ai';
-  time: string;
+  createdAt: number;
 }
 
-const ChatScreen = ({ navigation }: any) => {
+const AIChatScreen = ({ navigation }: any) => {
   const { theme, isDarkMode } = useTheme();
+  const listRef = useRef<FlatList<Message>>(null);
   const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [userPersona, setUserPersona] = useState('未提供收納人格');
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: '1',
-      text: '你好！我是你的 AI 收納小助手 🧙‍♂️',
+      id: 'welcome',
       sender: 'ai',
-      time: '10:00',
-    },
-    {
-      id: '2',
-      text: '今天有什麼空間整理的難題想跟我聊聊嗎？比如「衣服太多怎麼辦」或「如何規劃玄關收納」？',
-      sender: 'ai',
-      time: '10:01',
+      text: '你好，我是你的 AI 收納導師。你可以直接描述現在最亂的地方，我會幫你判斷哪些先丟、哪些先留、哪些適合收納。',
+      createdAt: Date.now(),
     },
   ]);
 
-  const scrollViewRef = useRef<ScrollView>(null);
+  const fixedItems: ChatItem[] = useMemo(
+    () => [
+      { name: '穿到起毛球的 T恤', category: '衣服', count: 3 },
+      { name: '未拆封的過期化妝品試用包', category: '小東西', count: 10 },
+      { name: '沒看過的統計學原文書', category: '書籍', count: 1 },
+    ],
+    [],
+  );
 
-  // 傳送訊息邏輯
-  const handleSend = () => {
-    if (inputText.trim() === '') return;
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
 
-    const now = new Date();
-    const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      const loadPersona = async () => {
+        try {
+          const savedPersona = await AsyncStorage.getItem('user_magic_identity');
+          if (!active) return;
 
-    // 1. 新增使用者訊息
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText,
-      sender: 'user',
-      time: timeString,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInputText('');
-
-    // 2. 模擬 AI 回覆延遲
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: '收到你的問題了！讓我想想如何用最溫柔、最適合你的魔法屬性來幫你規劃這個空間...✨',
-        sender: 'ai',
-        time: timeString,
+          setUserPersona(savedPersona?.trim() || '未提供收納人格');
+        } catch (error) {
+          if (!active) return;
+          console.log('讀取收納人格失敗', error);
+          setUserPersona('未提供收納人格');
+        }
       };
-      setMessages((prev) => [...prev, aiMessage]);
-    }, 1000);
+
+      loadPersona();
+
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+
+  // 將所有動態主題樣式抽離至 dynamicStyles，避免 JSX 內聯物件觸發 ESLint 警告
+  const dynamicStyles = useMemo(
+    () => ({
+      container: { backgroundColor: theme.background },
+      hero: { backgroundColor: theme.cardBg, borderBottomColor: theme.border },
+      title: { color: theme.textMain },
+      subtitle: { color: theme.textSub },
+      metaPill: { backgroundColor: theme.background },
+      metaPillText: { color: theme.textSub },
+      userText: { color: isDarkMode ? '#1c1816' : '#333' },
+      aiText: { color: theme.textMain },
+      inputRow: { backgroundColor: theme.cardBg, borderTopColor: theme.border },
+      input: {
+        backgroundColor: theme.background,
+        borderColor: theme.border,
+        color: theme.textMain,
+      },
+      sendButton: { backgroundColor: theme.primary },
+      sendText: { color: isDarkMode ? '#1c1816' : '#fff' },
+    }),
+    [theme, isDarkMode],
+  );
+
+  const scrollToBottom = () => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
   };
 
-  // 關鍵優化：抽離動態樣式，避免 ESLint 行內樣式警告
-  const userTextStyle = [
-    styles.userText,
-    { color: isDarkMode ? '#1c1816' : '#333' }
-  ];
+  const formatTime = (timestamp: number) => {
+    const now = new Date(timestamp);
+    return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  const handleSend = async () => {
+    const trimmedInput = inputText.trim();
+    if (!trimmedInput || loading) return;
+
+    const now = Date.now();
+    const userMessage: Message = {
+      id: `${now}-user`,
+      sender: 'user',
+      text: trimmedInput,
+      createdAt: now,
+    };
+
+    const loadingMessage: Message = {
+      id: `${now}-loading`,
+      sender: 'loading',
+      text: 'AI 導師思考中...',
+      createdAt: now,
+    };
+
+    setMessages((prev) => [...prev, userMessage, loadingMessage]);
+    setInputText('');
+    setLoading(true);
+    scrollToBottom();
+
+    try {
+      const result = await sendMessageToAI({
+        message: trimmedInput,
+        items: fixedItems,
+        user_persona: userPersona === '未提供收納人格' ? undefined : userPersona,
+      });
+
+      const aiMessage: Message = {
+        id: `${Date.now()}-ai`,
+        sender: 'ai',
+        text: result.reply,
+        createdAt: Date.now(),
+      };
+
+      setMessages((prev) => prev.filter((message) => message.id !== loadingMessage.id).concat(aiMessage));
+    } catch (error) {
+      const errorMessage: Message = {
+        id: `${Date.now()}-error`,
+        sender: 'ai',
+        text:
+          error instanceof Error
+            ? `目前無法取得回覆：${error.message}`
+            : '目前 AI 小助手暫時無法回覆，請稍後再試。',
+        createdAt: Date.now(),
+      };
+
+      setMessages((prev) => prev.filter((message) => message.id !== loadingMessage.id).concat(errorMessage));
+    } finally {
+      setLoading(false);
+      scrollToBottom();
+    }
+  };
+
+  const renderItem = ({ item }: ListRenderItemInfo<Message>) => {
+    const isUser = item.sender === 'user';
+    const isLoading = item.sender === 'loading';
+
+    return (
+      <View
+        style={[
+          styles.messageRow,
+          isUser ? styles.userRow : styles.aiRow,
+          isLoading && styles.loadingRow,
+        ]}
+      >
+        <View
+          style={[
+            styles.bubble,
+            isUser ? styles.userBubble : styles.aiBubble,
+            isLoading && styles.loadingBubble,
+          ]}
+        >
+          {isLoading ? (
+            <View style={styles.loadingContent}>
+              <ActivityIndicator size="small" color="#5c5c5c" />
+              <Text style={styles.loadingText}>{item.text}</Text>
+            </View>
+          ) : (
+            <Text style={isUser ? [styles.userText, dynamicStyles.userText] : [styles.aiText, dynamicStyles.aiText]}>
+              {item.text}
+            </Text>
+          )}
+          <Text style={[styles.timeText, isUser ? styles.userTime : styles.aiTime]}>
+            {formatTime(item.createdAt)}
+          </Text>
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 頂部導覽列 */}
-      <View style={[styles.header, { backgroundColor: theme.background, borderBottomColor: theme.border }]}>
-        <TouchableOpacity style={styles.headerLeftBtn} onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={28} color={theme.textMain} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { color: theme.textMain }]}>AI 收納小助手</Text>
-          <View style={styles.statusDotRow}>
-            <View style={styles.onlineDot} />
-            <Text style={[styles.statusText, { color: theme.textSub }]}>魔法在線中</Text>
+    <SafeAreaView style={[styles.container, dynamicStyles.container]}>
+      <KeyboardAvoidingView
+        style={styles.keyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[styles.hero, dynamicStyles.hero]}>
+          <View style={styles.heroTopRow}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+              <Icon name="chevron-back" size={28} color={theme.textMain} />
+            </TouchableOpacity>
+            <View style={styles.heroTitleBlock}>
+              <Text style={[styles.title, dynamicStyles.title]}>AI 收納聊天機器人</Text>
+              <Text style={[styles.subtitle, dynamicStyles.subtitle]}>
+                先減量，再收納，讓每次對話都能直接變成整理行動。
+              </Text>
+            </View>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <View style={styles.metaPills}>
+            <View style={[styles.metaPill, dynamicStyles.metaPill]}>
+              <Text style={[styles.metaPillText, dynamicStyles.metaPillText]}>人格：{userPersona}</Text>
+            </View>
+            <View style={[styles.metaPill, dynamicStyles.metaPill]}>
+              <Text style={[styles.metaPillText, dynamicStyles.metaPillText]}>已串接後端 /chat</Text>
+            </View>
           </View>
         </View>
-        <View style={styles.headerPlaceholder} />
-      </View>
 
-      {/* 鍵盤避讓容器 */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardView}
-      >
-        {/* 聊天訊息對話區 */}
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={styles.scrollContent}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map((msg) => {
-            const isAI = msg.sender === 'ai';
-            return (
-              <View
-                key={msg.id}
-                style={[styles.messageRow, isAI ? styles.aiRow : styles.userRow]}
-              >
-                {/* AI 頭貼 */}
-                {isAI && (
-                  <View style={[styles.aiAvatar, { backgroundColor: theme.primary }]}>
-                    <Icon name="planet-outline" size={18} color={isDarkMode ? '#1c1816' : '#fff'} />
-                  </View>
-                )}
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.messageList}
+          onContentSizeChange={scrollToBottom}
+          keyboardShouldPersistTaps="handled"
+        />
 
-                {/* 對話氣泡 */}
-                <View style={styles.bubbleContainer}>
-                  <View style={[
-                    styles.bubble, 
-                    isAI 
-                      ? [styles.aiBubble, { backgroundColor: theme.cardBg, borderColor: theme.border }] 
-                      : [styles.userBubble, { backgroundColor: theme.primary }]
-                  ]}>
-                    <Text style={isAI ? [styles.aiText, { color: theme.textMain }] : userTextStyle}>
-                      {msg.text}
-                    </Text>
-                  </View>
-                  <Text style={[styles.timeText, isAI ? styles.aiTime : styles.userTime]}>
-                    {msg.time}
-                  </Text>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-
-        {/* 底部輸入列 */}
-        <View style={[styles.inputContainer, { backgroundColor: theme.cardBg, borderTopColor: theme.border }]}>
+        <View style={[styles.inputRow, dynamicStyles.inputRow]}>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.textMain }]}
-            placeholder="輸入訊息..."
-            placeholderTextColor={isDarkMode ? '#6b5e56' : '#b5a4a4'}
+            style={[styles.input, dynamicStyles.input]}
             value={inputText}
             onChangeText={setInputText}
+            placeholder="例如：我的桌子很亂，該從哪裡開始？"
+            placeholderTextColor={isDarkMode ? '#8b7f73' : '#8e8e8e'}
             multiline
+            editable={!loading}
           />
+
           <TouchableOpacity
             style={[
-              styles.sendBtn, 
-              inputText.trim() === '' 
-                ? [styles.sendBtnDisabled, { backgroundColor: isDarkMode ? '#423833' : '#eadecc' }] 
-                : [styles.sendBtnActive, { backgroundColor: theme.primary }]
+              styles.sendButton,
+              dynamicStyles.sendButton,
+              (loading || !inputText.trim()) && styles.sendButtonDisabled,
             ]}
             onPress={handleSend}
-            disabled={inputText.trim() === ''}
+            disabled={loading || !inputText.trim()}
           >
-            <Icon name="arrow-up" size={20} color={isDarkMode && inputText.trim() !== '' ? '#1c1816' : '#fff'} />
+            <Text style={[styles.sendText, dynamicStyles.sendText]}>
+              {loading ? '傳送中' : '送出'}
+            </Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -173,143 +280,151 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    height: 60,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-  },
-  headerLeftBtn: {
-    zIndex: 10,
-    paddingVertical: 5,
-    paddingRight: 15,
-  },
-  headerTitleContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  statusDotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  onlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#529b77',
-    marginRight: 4,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  headerPlaceholder: {
-    width: 32,
-  },
-  keyboardView: {
+  keyboard: {
     flex: 1,
   },
-  scrollContent: {
+  hero: {
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
   },
-  messageRow: {
+  heroTopRow: {
     flexDirection: 'row',
-    marginBottom: 16,
-    maxWidth: '85%',
+    alignItems: 'flex-start',
   },
-  aiRow: {
-    alignSelf: 'flex-start',
-    alignItems: 'flex-end',
+  backBtn: {
+    paddingVertical: 5,
+    paddingRight: 14,
+    zIndex: 10,
   },
-  userRow: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
+  heroTitleBlock: {
+    flex: 1,
   },
-  aiAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    marginBottom: 16,
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
   },
-  bubbleContainer: {
-    flexDirection: 'column',
-  },
-  bubble: {
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.02,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  aiBubble: {
-    borderWidth: 1,
-    borderBottomLeftRadius: 4,
-  },
-  userBubble: {
-    borderBottomRightRadius: 4,
-  },
-  messageText: {
-    fontSize: 15,
+  subtitle: {
+    marginTop: 6,
+    fontSize: 14,
     lineHeight: 20,
   },
-  aiText: {},
-  userText: {},
-  timeText: {
-    fontSize: 10,
-    color: '#a89d9d',
-    marginTop: 4,
+  headerSpacer: {
+    width: 32,
   },
-  aiTime: {
-    alignSelf: 'flex-start',
-    marginLeft: 4,
+  metaPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  metaPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  metaPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  messageList: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    flexGrow: 1,
+  },
+  messageRow: {
+    width: '100%',
+    marginBottom: 12,
+    flexDirection: 'row',
+  },
+  userRow: {
+    justifyContent: 'flex-end',
+  },
+  aiRow: {
+    justifyContent: 'flex-start',
+  },
+  loadingRow: {
+    justifyContent: 'flex-start',
+  },
+  bubble: {
+    maxWidth: '82%',
+    padding: 14,
+    borderRadius: 18,
+  },
+  userBubble: {
+    backgroundColor: '#c6f0d6',
+    borderBottomRightRadius: 6,
+  },
+  aiBubble: {
+    backgroundColor: '#ffffff',
+    borderBottomLeftRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e7dfd0',
+  },
+  loadingBubble: {
+    backgroundColor: '#f2f2f2',
+  },
+  userText: {
+    fontSize: 16,
+    lineHeight: 23,
+    color: '#2f2a26',
+  },
+  aiText: {
+    fontSize: 16,
+    lineHeight: 23,
+    color: '#2f2a26',
+  },
+  timeText: {
+    marginTop: 6,
+    fontSize: 11,
   },
   userTime: {
-    alignSelf: 'flex-end',
-    marginRight: 4,
+    color: '#6d665c',
+    textAlign: 'right',
   },
-  inputContainer: {
+  aiTime: {
+    color: '#8b7e6f',
+    textAlign: 'left',
+  },
+  loadingContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    gap: 10,
+  },
+  loadingText: {
+    flexShrink: 1,
+    color: '#5e5e5e',
+    fontSize: 15,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 12,
     borderTopWidth: 1,
   },
   input: {
     flex: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-    fontSize: 15,
-    maxHeight: 100,
+    minHeight: 44,
+    maxHeight: 120,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
     borderWidth: 1,
   },
-  sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+  sendButton: {
     marginLeft: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
-  sendBtnActive: {},
-  sendBtnDisabled: {},
+  sendButtonDisabled: {
+    opacity: 0.55,
+  },
+  sendText: {
+    fontWeight: '700',
+  },
 });
 
-export default ChatScreen;
+export default AIChatScreen;

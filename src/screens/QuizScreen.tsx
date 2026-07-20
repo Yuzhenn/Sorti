@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, ScrollView, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
@@ -9,6 +9,7 @@ const questions = [
   {
     id: 1,
     question: "上課鐘聲快響了，你剛用完魔法筆，會把它放在哪裡？",
+    image: require('../assets/images/第一題.png'),
     options: [
       { text: "A. 桌上看得到的地方", scores: { visual: "豐富", detail: "簡易" } },
       { text: "B. 先收進附近抽屜", scores: { visual: "簡潔", detail: "簡易" } },
@@ -19,6 +20,7 @@ const questions = [
   {
     id: 2,
     question: "你可以選擇一間宿舍，最想入住哪一間？",
+    image: require('../assets/images/第二題.png'),
     options: [
       { text: "A. 桌面空空，物品全收起", scores: { visual: "簡潔", detail: "詳盡" } },
       { text: "B. 收藏展示，排列整齊", scores: { visual: "豐富", detail: "詳盡" } },
@@ -29,6 +31,7 @@ const questions = [
   {
     id: 3,
     question: "你在森林裡撿到一件新寶物，帶回房間後會？",
+    image: require('../assets/images/第三題.png'),
     options: [
       { text: "A. 找個櫃子先放著", scores: { visual: "簡潔", detail: "簡易" } },
       { text: "B. 安排固定收納位置", scores: { visual: "簡潔", detail: "詳盡" } },
@@ -39,6 +42,7 @@ const questions = [
   {
     id: 4,
     question: "校長半小時後要檢查房間，你會先做什麼？",
+    image: require('../assets/images/第四題.png'),
     options: [
       { text: "A. 快速把雜物藏起來", scores: { visual: "簡潔", detail: "簡易" } },
       { text: "B. 把桌上的東西排好看", scores: { visual: "豐富", detail: "簡易" } },
@@ -49,6 +53,7 @@ const questions = [
   {
     id: 5,
     question: "你獲得一張免費兌換券，會選哪一種收納道具？",
+    image: require('../assets/images/第五題.png'),
     options: [
       { text: "A. 開放式魔法層架", scores: { visual: "豐富", detail: "簡易" } },
       { text: "B. 分格隱藏收納櫃", scores: { visual: "簡潔", detail: "詳盡" } },
@@ -59,6 +64,7 @@ const questions = [
   {
     id: 6,
     question: "你突然找不到一枚很久沒用的徽章，通常會？",
+    image: require('../assets/images/第六題.png'),
     options: [
       { text: "A. 翻找幾個櫃子", scores: { visual: "簡潔", detail: "簡易" } },
       { text: "B. 掃一眼就找到", scores: { visual: "豐富", detail: "簡易" } },
@@ -69,6 +75,7 @@ const questions = [
   {
     id: 7,
     question: "最後一關，你希望自己的房間呈現什麼模樣？",
+    image: require('../assets/images/第七題.png'),
     options: [
       { text: "A. 收藏都展示出來", scores: { visual: "豐富", detail: "簡易" } },
       { text: "B. 表面乾淨就好", scores: { visual: "簡潔", detail: "簡易" } },
@@ -123,7 +130,6 @@ const QuizScreen = ({ navigation }: any) => {
   const [visualScores, setVisualScores] = useState<any>({ "豐富": 0, "簡潔": 0 });
   const [detailScores, setDetailScores] = useState<any>({ "簡易": 0, "詳盡": 0 });
 
-  // 點選選項後，記錄亮起、累加分數並自動跳轉下一題
   const handleSelectOption = (index: number) => {
     setSelectedOptionIdx(index);
 
@@ -177,7 +183,6 @@ const QuizScreen = ({ navigation }: any) => {
 
   const progressPercent = Math.round(((currentIdx + 1) / questions.length) * 100);
 
-  // 關鍵抽離：動態樣式計算，完美規避 ESLint 警告
   const primaryBtnTextStyle = [
     styles.primaryBtnText,
     { color: isDarkMode ? '#1c1816' : '#333' }
@@ -291,6 +296,7 @@ const QuizScreen = ({ navigation }: any) => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* 頂部進度條與標題 */}
       <View style={styles.header}>
         <Text style={[styles.progressText, { color: theme.textSub }]}>{currentIdx + 1} / {questions.length}</Text>
         <Text style={[styles.qNumber, { color: theme.textMain }]}>試煉 {currentIdx + 1}</Text>
@@ -300,43 +306,52 @@ const QuizScreen = ({ navigation }: any) => {
         </View>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.quizCard, { backgroundColor: theme.cardBg }]}>
-          <View style={styles.quizCardDecoration}>
-            <Icon name="ellipse" size={8} color={theme.border} style={styles.dotMargin} />
-            <Icon name="flash-outline" size={16} color={theme.primary} />
-            <Icon name="ellipse" size={8} color={theme.border} style={styles.dotMargin} />
-          </View>
-
-          <Text style={[styles.questionText, { color: theme.textMain }]}>{currentQuestion.question}</Text>
           
-          <View style={styles.optionsContainer}>
-            {currentQuestion.options.map((opt, index) => {
-              const isSelected = selectedOptionIdx === index;
-              return (
-                <TouchableOpacity 
-                  key={index} 
-                  style={[
-                    styles.optionButton, 
-                    { backgroundColor: theme.background, borderColor: theme.border },
-                    isSelected ? { backgroundColor: theme.primary, borderColor: theme.primary } : null
-                  ]} 
-                  onPress={() => handleSelectOption(index)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[
-                    styles.optionText, 
-                    { color: theme.textMain },
-                    isSelected ? [styles.selectedOptionText, { color: isDarkMode ? '#1c1816' : '#333' }] : null
-                  ]}>
-                    {opt.text}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          {/* 1. 情境圖保持原本大小尺寸 */}
+          {currentQuestion.image && (
+            <View style={styles.qImageWrapper}>
+              <Image 
+                source={currentQuestion.image} 
+                style={styles.qImage} 
+                resizeMode="cover"
+              />
+            </View>
+          )}
+
+          {/* 2. 題目與選項區域：已將中間一排圖示刪除，整體順暢往上提升 */}
+          <View style={styles.cardInnerContent}>
+            <Text style={[styles.questionText, { color: theme.textMain }]}>{currentQuestion.question}</Text>
+            
+            <View style={styles.optionsContainer}>
+              {currentQuestion.options.map((opt, index) => {
+                const isSelected = selectedOptionIdx === index;
+                return (
+                  <TouchableOpacity 
+                    key={index} 
+                    style={[
+                      styles.optionButton, 
+                      { backgroundColor: theme.background, borderColor: theme.border },
+                      isSelected ? { backgroundColor: theme.primary, borderColor: theme.primary } : null
+                    ]} 
+                    onPress={() => handleSelectOption(index)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.optionText, 
+                      { color: theme.textMain },
+                      isSelected ? [styles.selectedOptionText, { color: isDarkMode ? '#1c1816' : '#333' }] : null
+                    ]}>
+                      {opt.text}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
 
       {/* 底部按鈕 */}
       <View style={styles.footer}>
@@ -360,6 +375,8 @@ const QuizScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centerContent: { alignItems: 'center', paddingVertical: 50, paddingHorizontal: 24, justifyContent: 'center' },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, flexGrow: 1, justifyContent: 'center' },
+  
   magicTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 15, marginTop: 10 },
   introTitle: { fontSize: 26, fontWeight: '700', textAlign: 'center', letterSpacing: 1 },
   
@@ -371,26 +388,49 @@ const styles = StyleSheet.create({
   primaryBtn: { paddingVertical: 14, paddingHorizontal: 60, borderRadius: 25, elevation: 1 },
   primaryBtnText: { fontSize: 18, fontWeight: '600' },
   
-  header: { marginTop: 24, alignItems: 'center', width: '100%', paddingHorizontal: 30 },
-  progressText: { fontSize: 14, fontWeight: '600', letterSpacing: 1 },
-  qNumber: { fontSize: 28, fontWeight: '700', marginTop: 2 },
-  topProgressContainer: { width: '100%', height: 4, borderRadius: 2, marginTop: 12, overflow: 'hidden' },
+  header: { marginTop: 10, alignItems: 'center', width: '100%', paddingHorizontal: 24, marginBottom: 4 },
+  progressText: { fontSize: 13, fontWeight: '600', letterSpacing: 1 },
+  qNumber: { fontSize: 24, fontWeight: '700', marginTop: 1 },
+  topProgressContainer: { width: '100%', height: 4, borderRadius: 2, marginTop: 8, overflow: 'hidden' },
   topProgressBarFill: { height: '100%', borderRadius: 2 },
   
-  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  quizCard: { padding: 24, borderRadius: 24, elevation: 3, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
-  quizCardDecoration: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  dotMargin: { marginHorizontal: 10 },
-  questionText: { fontSize: 18, textAlign: 'center', marginBottom: 25, lineHeight: 28, fontWeight: '600', paddingHorizontal: 6 },
+  quizCard: { 
+    borderRadius: 22, 
+    elevation: 3, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.04, 
+    shadowRadius: 8, 
+    shadowOffset: { width: 0, height: 3 },
+    overflow: 'hidden', 
+  },
+  
+  // 圖片容器維持原有大小不變
+  qImageWrapper: {
+    width: '100%',
+    aspectRatio: 1.6,
+  },
+  qImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  // 刪除裝飾列後，內文頂部 Padding 調至 16px，精準緊接圖片下方
+  cardInnerContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+
+  questionText: { fontSize: 17, textAlign: 'center', marginBottom: 16, lineHeight: 24, fontWeight: '600', paddingHorizontal: 4 },
   optionsContainer: { width: '100%' },
-  optionButton: { borderWidth: 1, paddingVertical: 15, paddingHorizontal: 18, borderRadius: 14, marginBottom: 12 },
-  selectedOption: {},
-  optionText: { fontSize: 15, textAlign: 'left', lineHeight: 20 },
+  
+  optionButton: { borderWidth: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, marginBottom: 8 },
+  optionText: { fontSize: 14, textAlign: 'left', lineHeight: 18 },
   selectedOptionText: { fontWeight: '600' },
   
-  footer: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingHorizontal: 24, marginBottom: 35, alignItems: 'center' },
-  navButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20 },
-  navButtonText: { fontSize: 16, fontWeight: '600' },
+  footer: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingHorizontal: 20, marginVertical: 8, alignItems: 'center' },
+  navButton: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 18 },
+  navButtonText: { fontSize: 15, fontWeight: '600' },
   navPlaceholder: { width: 80 },
   
   resultCard: { padding: 24, borderRadius: 24, width: '100%', marginBottom: 25, elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10 },
