@@ -36,7 +36,13 @@ const CustomDrawer = (props: any) => {
             label="AI對話" 
             icon="chatbubbles-outline" 
             theme={theme}
-            onPress={() => props.navigation.navigate('Chat')} 
+            onPress={() => props.navigation.navigate('AIChat')} 
+          />
+          <DrawerItem 
+            label="歷史紀錄" 
+            icon="time-outline" 
+            theme={theme}
+            onPress={() => props.navigation.navigate('AIAnalysisHistory')} 
           />
           <DrawerItem 
             label="二手拍賣" 

@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   headerLeftBtn: { zIndex: 10, paddingVertical: 5, paddingRight: 15 },
   headerTitle: {
     position: 'absolute', left: 0, right: 0, textAlign: 'center',
-    fontSize: 22, fontWeight: '600',
+    fontSize: 22, fontWeight: '600', marginTop: 6,
   },
   scanBtn: { padding: 4 },
   filterContainer: {
@@ -290,8 +290,22 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   bottomNav: {
-    position: 'absolute', bottom: 0, width: '100%', height: 70,
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 8,
+
+    height: 70,
+    paddingTop: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 12,
+
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+
+    borderTopWidth: 1,
+    backgroundColor: '#FFFDF2',
   },
   navItem: { alignItems: 'center' },
   navText: { fontSize: 12, marginTop: 4 },

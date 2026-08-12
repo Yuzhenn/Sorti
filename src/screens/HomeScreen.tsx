@@ -13,11 +13,13 @@ import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native'; // 當頁面重新獲得焦點時觸發讀取
 import { useTheme } from '../context/ThemeContext';
+import { loadCheckInRecords } from '../services/photoTempStore';
 
 const HomeScreen = ({ navigation }: any) => {
   const { theme, isDarkMode } = useTheme();
   // 建立動態魔法身分 state，預設值為「魔法學徒」
   const [magicIdentity, setMagicIdentity] = useState('🧙‍♂️ 魔法學徒');
+  const [checkInDays, setCheckInDays] = useState(0);
   const isFocused = useIsFocused(); // 追蹤頁面是否處於當前焦點，防止頁面返回時不刷新
 
   // 讀取儲存在手機內的魔法身分
@@ -35,10 +37,21 @@ const HomeScreen = ({ navigation }: any) => {
     }
   };
 
+  const loadCheckInDays = async () => {
+    try {
+      const records = await loadCheckInRecords();
+      setCheckInDays(Object.keys(records).length);
+    } catch (e) {
+      console.log('讀取打卡天數失敗', e);
+      setCheckInDays(0);
+    }
+  };
+
   // 每當首頁載入或從測驗頁跳轉回來時，都重新讀取一次
   useEffect(() => {
     if (isFocused) {
       loadMagicIdentity();
+      loadCheckInDays();
     }
   }, [isFocused]);
 
@@ -120,7 +133,7 @@ const HomeScreen = ({ navigation }: any) => {
           {/* 每日打卡 ── 輕量化垂直膠囊 */}
           <View style={[styles.checkInCard, { backgroundColor: theme.cardBg }]}>
             <MaterialIcon name="calendar-check" size={26} color={theme.textSub} />
-            <Text style={[styles.countText, { color: theme.textMain }]}>連續 5 天</Text>
+            <Text style={[styles.countText, { color: theme.textMain }]}>{`已打卡 ${checkInDays} 天`}</Text>
             <TouchableOpacity 
               style={[styles.checkInBtn, { backgroundColor: theme.primary }]} 
               onPress={() => navigation.navigate('CalendarCheckIn')}
@@ -131,7 +144,11 @@ const HomeScreen = ({ navigation }: any) => {
         </View>
 
         {/* 主角：開始 AI 分析 ── 滿版拍立得觀景窗設計 */}
-        <TouchableOpacity style={styles.mainCard} activeOpacity={0.9}>
+        <TouchableOpacity
+          style={styles.mainCard}
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('AIAnalysisCapture')}
+        >
           <View style={styles.imagePlaceholder}>
             <Image 
               source={{ uri: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?q=80&w=1000' }} 
@@ -150,20 +167,6 @@ const HomeScreen = ({ navigation }: any) => {
               <Text style={[styles.mainCardSub, { color: theme.primary }]}>拍張照，找回空間的魔法秩序 ✨</Text>
             </View>
           </View>
-        </TouchableOpacity>
-
-        {/* 空間測量 */}
-        <TouchableOpacity style={[styles.measureCard, { backgroundColor: theme.cardBg }]} activeOpacity={0.8}>
-          <View style={styles.measureLeft}>
-            <View style={[styles.measureIconCircle, { backgroundColor: theme.background }]}>
-              <MaterialIcon name="ruler-square" size={24} color={theme.textSub} />
-            </View>
-            <View style={styles.measureTextContent}>
-              <Text style={[styles.measureTitle, { color: theme.textMain }]}>空間測量</Text>
-              <Text style={[styles.measureSub, { color: theme.textSub }]}>智能測量你還剩餘多少可用空間</Text>
-            </View>
-          </View>
-          <Icon name="chevron-forward" size={18} color={theme.textSub} />
         </TouchableOpacity>
       </ScrollView>
 
@@ -226,7 +229,7 @@ const styles = StyleSheet.create({
   userGreeting: { fontSize: 15, fontWeight: '500' },
   identityBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginLeft: 8 },
   identityText: { fontSize: 11, fontWeight: '600' },
-  welcomeText: { fontSize: 26, fontWeight: '700', marginTop: 2, lineHeight: 34 },
+  welcomeText: { fontSize: 26, fontWeight: '700', marginTop: 8, lineHeight: 34 },
   
   // 第一排卡片重組
   topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
@@ -272,28 +275,31 @@ const styles = StyleSheet.create({
   mainCardTitle: { fontSize: 20, fontWeight: '700', color: '#fff' },
   mainCardSub: { fontSize: 13, marginTop: 4, fontWeight: '500' },
 
-  // 空間測量功能條
-  measureCard: {
-    borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.03, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }
-  },
-  measureLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  measureIconCircle: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  measureTextContent: { flex: 1 },
-  measureTitle: { fontSize: 16, fontWeight: '600' },
-  measureSub: { fontSize: 12, marginTop: 2 },
-
   // 底部導覽列
   bottomNav: {
-    position: 'absolute', bottom: 0, width: '100%', height: 70,
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 8,
+
+    height: 70,
+    paddingTop: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 12,
+
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+
+    borderTopWidth: 1,
+    backgroundColor: '#FFFDF2',
   },
   navItem: { alignItems: 'center' },
   navText: { fontSize: 12, marginTop: 4 },
   activeNavText: { fontSize: 12, marginTop: 4, fontWeight: '600' },
 
   fab: {
-    position: 'absolute', right: 20, bottom: 90, width: 56, height: 56,
+    position: 'absolute', right: 20, bottom: 125, width: 56, height: 56,
     borderRadius: 28, justifyContent: 'center', alignItems: 'center',
     elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }
   }

@@ -22,6 +22,21 @@ import type { ChatItem } from '../types/ai';
 
 type MessageSender = 'user' | 'ai' | 'loading';
 
+const PERSONA_ALIASES: Record<string, string> = {
+  '遮醜結果師': '遮醜結界師',
+  '遮醜結介師': '遮醜結界師',
+  '遮醜結界士': '遮醜結界師',
+  '首席秩序官員': '首席秩序官',
+  '時光展覽師': '時光展覽家',
+};
+
+function normalizePersona(persona: string | null | undefined): string {
+  if (!persona) return '未提供收納人格';
+
+  const cleanedPersona = persona.replace('🔮', '').replace('人格：', '').trim();
+  return PERSONA_ALIASES[cleanedPersona] ?? cleanedPersona;
+}
+
 interface Message {
   id: string;
   sender: MessageSender;
@@ -29,7 +44,8 @@ interface Message {
   createdAt: number;
 }
 
-const AIChatScreen = ({ navigation }: any) => {
+const AIChatScreen = ({ route, navigation }: any) => {
+  const routeParams = route?.params ?? {};
   const { theme, isDarkMode } = useTheme();
   const listRef = useRef<FlatList<Message>>(null);
   const [inputText, setInputText] = useState('');
@@ -44,14 +60,15 @@ const AIChatScreen = ({ navigation }: any) => {
     },
   ]);
 
-  const fixedItems: ChatItem[] = useMemo(
-    () => [
-      { name: '穿到起毛球的 T恤', category: '衣服', count: 3 },
-      { name: '未拆封的過期化妝品試用包', category: '小東西', count: 10 },
-      { name: '沒看過的統計學原文書', category: '書籍', count: 1 },
-    ],
-    [],
-  );
+  const detectedItems: ChatItem[] = Array.isArray(routeParams.detectedItems)
+    ? routeParams.detectedItems.filter((item: unknown): item is ChatItem => {
+        if (!item || typeof item !== 'object') return false;
+        const candidate = item as ChatItem;
+        return typeof candidate.name === 'string' && typeof candidate.category === 'string';
+      })
+    : [];
+
+  const routePersona = routeParams?.userPersona ?? routeParams?.persona;
 
   useFocusEffect(
     useCallback(() => {
@@ -62,7 +79,7 @@ const AIChatScreen = ({ navigation }: any) => {
           const savedPersona = await AsyncStorage.getItem('user_magic_identity');
           if (!active) return;
 
-          setUserPersona(savedPersona?.trim() || '未提供收納人格');
+          setUserPersona(normalizePersona(routePersona ?? savedPersona));
         } catch (error) {
           if (!active) return;
           console.log('讀取收納人格失敗', error);
@@ -75,7 +92,7 @@ const AIChatScreen = ({ navigation }: any) => {
       return () => {
         active = false;
       };
-    }, []),
+    }, [routePersona]),
   );
 
   // 將所有動態主題樣式抽離至 dynamicStyles，避免 JSX 內聯物件觸發 ESLint 警告
@@ -139,8 +156,8 @@ const AIChatScreen = ({ navigation }: any) => {
     try {
       const result = await sendMessageToAI({
         message: trimmedInput,
-        items: fixedItems,
-        user_persona: userPersona === '未提供收納人格' ? undefined : userPersona,
+        items: detectedItems,
+        user_persona: userPersona === '未提供收納人格' ? undefined : normalizePersona(userPersona),
       });
 
       const aiMessage: Message = {
@@ -233,6 +250,11 @@ const AIChatScreen = ({ navigation }: any) => {
             <View style={[styles.metaPill, dynamicStyles.metaPill]}>
               <Text style={[styles.metaPillText, dynamicStyles.metaPillText]}>已串接後端 /chat</Text>
             </View>
+            <View style={[styles.metaPill, dynamicStyles.metaPill]}>
+              <Text style={[styles.metaPillText, dynamicStyles.metaPillText]}>
+                {detectedItems.length > 0 ? `已帶入 ${detectedItems.length} 個物品` : '未帶入物品清單'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -251,7 +273,7 @@ const AIChatScreen = ({ navigation }: any) => {
             style={[styles.input, dynamicStyles.input]}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="例如：我的桌子很亂，該從哪裡開始？"
+            placeholder="例如：我的桌子很亂，該從哪裡開始整理？"
             placeholderTextColor={isDarkMode ? '#8b7f73' : '#8e8e8e'}
             multiline
             editable={!loading}
@@ -402,6 +424,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     padding: 12,
     borderTopWidth: 1,
+    paddingBottom: Platform.OS === 'android' ? 28 : 12,
   },
   input: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,8 +10,11 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { Camera, useCameraDevice, useCameraPermission, usePhotoOutput } from 'react-native-vision-camera';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../context/ThemeContext';
+import { loadCheckInRecords, saveCheckInRecord } from '../services/photoTempStore';
+import { CommonResolutions } from 'react-native-vision-camera';
 
 const today = new Date();
 
@@ -24,8 +27,10 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
   const [checkInRecords, setCheckInRecords] = useState<any>({});
   
   const { hasPermission, requestPermission } = useCameraPermission();
-
-  const cameraRef = useRef<any>(null); 
+  const photoOutput = usePhotoOutput({
+    targetResolution: CommonResolutions.HD_4_3,
+    quality: 1, // 已修正型態問題
+  });
   const device = useCameraDevice('back');
 
   const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
@@ -42,6 +47,23 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
       requestPermission();
     }
   }, [hasPermission, requestPermission]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadRecords = async () => {
+      const storedRecords = await loadCheckInRecords();
+      if (active) {
+        setCheckInRecords(storedRecords);
+      }
+    };
+
+    loadRecords();
+
+    return () => {
+      active = false;
+    };
+  }, []);
   
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -74,33 +96,66 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
   };
 
   const handleTakePic = async () => {
-    if (cameraRef.current && selectedDay !== null) {
-      try {
-        console.log('嘗試拍照...');
-        const photo = await cameraRef.current.takePhoto();
-        console.log('拍照成功，原始資料:', photo);
-        
-        if (photo && photo.path) {
+    if (selectedDay === null) return;
+
+    if (typeof photoOutput.capturePhotoToFile !== 'function') {
+      Alert.alert('相機尚未就緒', '請稍等相機載入完成後再拍照。');
+      return;
+    }
+
+    try {
+      console.log('嘗試拍照...');
+      const photoFile = await photoOutput.capturePhotoToFile(
+        { flashMode: 'off' },
+        {},
+      );
+      console.log('拍照成功，原始資料:', photoFile);
+
+      if (photoFile && photoFile.filePath) {
+        const recordKey = `${currentYear}-${currentMonth + 1}-${selectedDay}`;
+        const localUri = photoFile.filePath.startsWith('file://') ? photoFile.filePath : `file://${photoFile.filePath}`;
+
+        const nextRecords = await saveCheckInRecord(recordKey, localUri);
+        setCheckInRecords(nextRecords);
+        setIsCameraOpen(false);
+        setSelectedDay(null);
+      }
+    } catch (error) {
+      console.log('快門硬體拒絕，拍照失敗原因:', error);
+      Alert.alert('錯誤', '拍照發生錯誤，請稍後再試');
+    }
+  };
+
+  const handlePickFromGallery = async () => {
+    if (selectedDay === null) return;
+
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 1,
+        selectionLimit: 1,
+      });
+
+      if (result.didCancel) return;
+
+      if (result.assets && result.assets.length > 0) {
+        const selectedImageUri = result.assets[0].uri;
+        if (selectedImageUri) {
           const recordKey = `${currentYear}-${currentMonth + 1}-${selectedDay}`;
-          const localUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
-          
-          setCheckInRecords((prev: any) => ({
-            ...prev,
-            [recordKey]: localUri,
-          }));
+          const nextRecords = await saveCheckInRecord(recordKey, selectedImageUri);
+          setCheckInRecords(nextRecords);
           setIsCameraOpen(false);
           setSelectedDay(null);
         }
-      } catch (error) {
-        console.log('快門硬體拒絕，拍照失敗原因:', error);
-        Alert.alert('錯誤', '拍照發生錯誤，請稍後再試');
       }
+    } catch (error) {
+      console.log('選擇相片失敗:', error);
+      Alert.alert('錯誤', '匯入照片失敗，請稍後再試');
     }
   };
 
   const currentShortcutKey = selectedDay ? `${currentYear}-${currentMonth + 1}-${selectedDay}` : '';
 
-  // 動態抽離「今天」的文字顏色，防止 ESLint 行內樣式警告
   const getTodayTextStyle = () => {
     return [
       styles.dayText,
@@ -122,15 +177,10 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
     return (
       <View style={styles.cameraContainer}>
         <Camera
-          ref={cameraRef}
           style={StyleSheet.absoluteFill}
           device={device}
           isActive={true}
-          {...({
-            photo: true,
-            mode: 'photo',
-            output: ['photo']
-          } as any)}
+          outputs={[photoOutput]}
         />
 
         <TouchableOpacity 
@@ -141,16 +191,22 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
         </TouchableOpacity>
 
         <View style={styles.cameraBottomBar}>
-          <View style={styles.albumShortcut}>
+          <TouchableOpacity 
+            style={styles.albumShortcut}
+            onPress={handlePickFromGallery}
+            activeOpacity={0.7}
+          >
             {checkInRecords[currentShortcutKey] ? (
               <Image 
                 source={{ uri: checkInRecords[currentShortcutKey] }} 
                 style={styles.shortcutImg} 
               />
             ) : (
-              <View style={[styles.shortcutImg, styles.albumEmpty]} />
+              <View style={[styles.shortcutImg, styles.albumEmpty]}>
+                <Icon name="images-outline" size={24} color="#fff" />
+              </View>
             )}
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.shutterBtn} onPress={handleTakePic} activeOpacity={0.8}>
             <View style={styles.shutterInner} />
@@ -165,7 +221,6 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
   // --- 2. 日曆打卡主介面 ---
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 頂部輕盈導覽 */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Icon name="chevron-back" size={28} color={theme.textMain} />
@@ -175,8 +230,6 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* 月份切換 */}
         <View style={[styles.monthSelector, { backgroundColor: theme.cardBg }]}>
           <TouchableOpacity 
             onPress={handlePrevMonth} 
@@ -193,9 +246,7 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* 日曆主網格卡片 */}
         <View style={[styles.calendarCard, { backgroundColor: theme.cardBg }]}>
-          {/* 星期標頭 */}
           <View style={styles.weekHeader}>
             {weekDays.map((day, index) => (
               <Text key={index} style={[styles.weekDayText, index === 0 ? styles.sundayText : null]}>
@@ -204,7 +255,6 @@ const CalendarCheckInScreen = ({ navigation }: any) => {
             ))}
           </View>
 
-          {/* 日期網格 */}
           <View style={styles.calendarGrid}>
             {calendarCells.map((cellValue, index) => {
               if (cellValue === '') {
@@ -317,11 +367,11 @@ const styles = StyleSheet.create({
   cameraBottomBar: { 
     position: 'absolute', bottom: 0, width: '100%', height: 150, 
     backgroundColor: 'rgba(0, 0, 0, 0.65)', flexDirection: 'row', 
-    justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 20
+    justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: 24, paddingBottom: 20 // 已修正 justifyContent
   },
   albumShortcut: { width: 52, height: 52, borderRadius: 12, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)', backgroundColor: '#333' },
   shortcutImg: { width: '100%', height: '100%' },
-  albumEmpty: { backgroundColor: '#222' },
+  albumEmpty: { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' },
   shutterBtn: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
   shutterInner: { width: 56, height: 58, borderRadius: 29, backgroundColor: '#fff' },
   cameraPlaceholder: { width: 52 },

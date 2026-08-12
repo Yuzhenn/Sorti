@@ -4,7 +4,7 @@
 		{
 			"label": "start-backend",
 			"type": "shell",
-			"command": "c:\\newapp\\SORTI\\.venv\\Scripts\\python.exe",
+			"command": "c:\\newapp\\SORTI\\.venv-1\\Scripts\\python.exe",
 			"args": [
 				"-m",
 				"uvicorn",
@@ -15,6 +15,18 @@
 				"8000",
 				"--app-dir",
 				"c:\\newapp\\SORTI\\src\\backend"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "start-frontend",
+			"type": "shell",
+			"command": "cmd.exe",
+			"args": [
+				"/c",
+				"adb devices && adb reverse tcp:8000 tcp:8000 && adb reverse tcp:8081 tcp:8081 && npx.cmd react-native run-android"
 			],
 			"isBackground": true,
 			"problemMatcher": [],
